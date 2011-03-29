@@ -435,6 +435,7 @@ class IRCBot:
     #  "failed" if a handler returned False
     #  or "success" if all the handlers returned True
     def fire_evt(self, event, payload=None):
+        state = "unhandled"
         if (self.evt_dispatch.has_key(event)):
             state = "success"
             for plugin, handler in self.evt_dispatch[event]:    # Turn into map?
@@ -444,6 +445,4 @@ class IRCBot:
                     state = "failed"
                 debug(self.dbgstr, "    %s handled: %s (%s)" % (event, plugin.name, result))
                 #return state
-        else:
-            return "unhandled"
-        return "handled"
+        return state
