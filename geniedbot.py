@@ -373,6 +373,7 @@ class ChannelPlugin(BotPlugin):
 		except OSError:
 			pass
 		os.mkfifo(self.fifo_file)
+		os.chmod(self.fifo_file, 0660)
 		self.fifo = os.open(self.fifo_file, os.O_RDONLY | os.O_NONBLOCK)
 		if self.fifo:
 			irc_msg.irc_server.poll.register(self.fifo, select.POLLIN)
