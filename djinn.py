@@ -31,6 +31,7 @@
 # #############################################################################
 
 import socket
+import select
 import time
 import string
 
@@ -206,14 +207,14 @@ class PingPongPlugin(BotPlugin):
         self.ping_period = this_ping - self.last_ping + 3    # If the server is pinging us then we probably don't need to ping it to keep the connection alive
         self.last_ping = this_ping
         irc_msg.irc_server.send("PONG %s" % irc_msg.body[0])
-        irc_msg.irc_server.socket.settimeout(self.ping_period)
+        irc_msg.irc_server.timeout = self.ping_period
         return True
     def recv_pong(self, irc_msg):
         ts = irc_msg.body[0]
         if ts == self.pong:
             self.pong = None
             self.ping_period = self.ping_period * 1.1    # The server is alive: open out our ping period
-            irc_msg.irc_server.socket.settimeout(self.ping_period)
+            irc_msg.irc_server.timeout = self.ping_period
         else:
             debug(self.dbgstr, "Ignoring spurious PONG :%s != %s" % (ts, self.pong))
         return True
@@ -221,7 +222,7 @@ class PingPongPlugin(BotPlugin):
         if self.pong == None:
             self.pong = str(int(time.time()))
             irc_evt.irc_server.send("PING %s" % self.pong)
-            irc_evt.irc_server.socket.settimeout(3)
+            irc_evt.irc_server.timeout = 3
             return True
         else:
             self.ping_period = int(self.ping_period / 2)
@@ -255,6 +256,8 @@ class IRCBot:
         self.dbgstr = ("%s:%s" % (server, ident))
         self.ping_period = 90     # Expect to see a ping from a server every 90 seconds by default
         self.socket = None
+        self.timeout = 3
+        self.poll = None
         self.delay = 0.1
         self.delay_incr = 0.1
         self.rxbuf = None
@@ -269,6 +272,7 @@ class IRCBot:
         if self.connected == 0:
             debug(self.dbgstr, "Connecting...")
             self.socket = socket.socket()
+            self.timeout = 3
             self.socket.settimeout(3)
             while not self.connected:
                 try:
@@ -281,7 +285,11 @@ class IRCBot:
                     debug(self.dbgstr, "Failed connect(): %s" % emsg)
                     time.sleep(5)
                     continue
-            self.socket.settimeout(self.ping_period)
+            self.timeout = self.ping_period
+            self.socket.settimeout(0.0)
+            self.socket.setblocking(0)
+            self.poll = select.poll()
+            self.poll.register(self.socket, select.POLLIN)
             self.rxbuf = buffer(self.socket)
             debug(self.dbgstr, "Connected!")
             self.fire_evt("connected")
@@ -295,20 +303,34 @@ class IRCBot:
             return
         while 1:
             event = None
-            try:
-                for line in self.rxbuf.next():
-                    debug(self.dbgstr, "RX: %s" % line)
-                    if not self.irc_parse(line):
-                        self.dropconnect()
-                        return
-            except socket.timeout, emsg:
-                debug(self.dbgstr, "listen(): %s" % emsg)
+            payload = None
+            poll_events = self.poll.poll(self.timeout * 1000)
+            if not poll_events:
                 event = "socket_timeout"
-            except socket.error, emsg:
-                debug(self.dbgstr, "listen(): %s" % emsg)
-                event = "socket_error"
+            for poll_fd, poll_evt in poll_events:
+                if poll_fd == self.socket.fileno():
+                    try:
+                        while 1:
+                            for line in self.rxbuf.next():
+                                debug(self.dbgstr, "RX: %s" % line)
+                                if not self.irc_parse(line):
+                                    self.dropconnect()
+                                    return
+                    except socket.timeout, emsg:
+                        debug(self.dbgstr, "listen(): %s" % emsg)
+                        event = "socket_timeout"
+                    except socket.error, (eno, emsg):
+                        if eno == 11:
+                            debug(self.dbgstr, "listen(): nothing to read")
+                            #event = "socket_timeout"
+                        else:
+                            debug(self.dbgstr, "listen(): %s" % emsg)
+                            event = "socket_error"
+                else:
+                    event = "socket"
+                    payload = poll_fd, poll_evt
             if (event != None):
-                event = self.fire_evt(event)
+                event = self.fire_evt(event, payload)
                 if event == "unhandled":
                     debug(self.dbgstr, "    Unhandled socket event: aborting!")
                     self.dropconnect()
