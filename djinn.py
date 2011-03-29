@@ -126,7 +126,8 @@ class IRCEvt:
     def dump(self):
         print("ircserver : <%s>" % self.irc_server)
         print("  irc_cmd : <%s>" % self.irc_evt)
-        print("  payload : <%s>" % self.payload)
+        for payload in self.payload:
+            print("  payload : <%s>" % payload)
         print("   dbgstr : <%s>" % self.dbgstr)
 
 
