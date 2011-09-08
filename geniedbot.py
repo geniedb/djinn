@@ -301,21 +301,23 @@ class WorldDatePlugin(PrivmsgPlugin):
 	def __init__(self):
 		PrivmsgPlugin.__init__(self)
 		self.name = "World Date Plugin"
-		self.wdate_bin = "wdate"
 
 	def world_date(self, irc_msg, hits):
-		if hits[0] != "":
-			args = [self.wdate_bin] + [hits[0]]
-		else:
-			args = [self.wdate_bin]
-
 		try:
-			a = subprocess.Popen(args, stdout=subprocess.PIPE).communicate()[0]
-			for line in a.split("\n"):
+			for line in WorldDatePlugin.wdate(hits[0]):
 				irc_msg.irc_server.privmsg(irc_msg.reply_to, line)
 		except OSError, e:
 			irc_msg.irc_server.privmsg(irc_msg.reply_to, ("wdate: %s" % e))
-
+        
+        @staticmethod
+        def wdate(timezone=None):
+                wdate_bin = "wdate"
+                command = timezone is None and [wdate_bin] or [wdate_bin, timezone]
+                print command
+                a = subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]
+	        for line in a.split("\n"):
+			yield line
+	
 	privmsg_dispatch = {
 			r"wdate( [A-Z_a-z/]*)?": world_date,
 			}
@@ -344,6 +346,8 @@ class WhereUserPlugin(PrivmsgPlugin):
                                 details["City"] = u"%s, " % details["City"]
 
                         irc_msg.irc_server.privmsg(reply_to, ("%s is in %s%s." % (irc_msg.opts[0], details["City"], details["CountryName"])))
+                        for line in WorldDatePlugin.wdate(details["TimezoneName"]):
+                                irc_msg.irc_server.privmsg(reply_to, line)
 
                         self.requests.remove((u,r))
                 return True
