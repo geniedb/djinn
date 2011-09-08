@@ -317,7 +317,7 @@ class WorldDatePlugin(PrivmsgPlugin):
 			irc_msg.irc_server.privmsg(irc_msg.reply_to, ("wdate: %s" % e))
 
 	privmsg_dispatch = {
-			r"wdate( [A-Za-z/]*)?": world_date,
+			r"wdate( [A-Z_a-z/]*)?": world_date,
 			}
 
 class WhereUserPlugin(PrivmsgPlugin):
