@@ -312,7 +312,7 @@ class WorldDatePlugin(PrivmsgPlugin):
         @staticmethod
         def wdate(timezone=None):
                 wdate_bin = "wdate"
-                command = timezone is None and [wdate_bin] or [wdate_bin, timezone]
+                command = (timezone is None or timezone.strip() == "") and [wdate_bin] or [wdate_bin, timezone]
                 print command
                 a = subprocess.Popen(command, stdout=subprocess.PIPE).communicate()[0]
 	        for line in a.split("\n"):
@@ -349,12 +349,14 @@ class WhereUserPlugin(PrivmsgPlugin):
                         for line in WorldDatePlugin.wdate(details["TimezoneName"]):
                                 irc_msg.irc_server.privmsg(reply_to, line)
 
-                        self.requests.remove((u,r))
+                        self.requests.remove((user,reply_to))
                 return True
                                            
         privmsg_dispatch = {
                         r"where (is )?([A-Za-z0-9-_]*)": where_user,
+                        r"hunt (for )?([A-Za-z0-9-_]*)": where_user
                         }
+
 class TmpOpPlugin(PrivmsgPlugin):
 	def __init__(self):
 		PrivmsgPlugin.__init__(self)
