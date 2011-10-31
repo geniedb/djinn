@@ -1,0 +1,50 @@
+djinn is a stupid IRC bot written at GenieDB.
+
+https://github.com/geniedb/djinn
+
+An IRC bot that brings trac to IRC,
+djinn was written by Andy Bennett <andyjpb@geniedb.com>
+
+
+Setup & Configuration
+=====================
+
+You will probably want to edit djinn.py to set the following variables:
+
+	HOST: Set this to the hostname of the IRC server you wish djinn to
+	      connect to.
+
+	NICK: Set this to the IRC nick that you wish djinn to use.
+
+	CHAN: Set this to the IRC channel that you wish djinn to join.
+
+	TRAC_TICKETS: Set this to the URL of the ticket section of your trac
+	              installation. You can find this out by viewing one of your
+		      trac tickets in your browser and then removing the last
+		      portion, including the slash. For example, if your ticket
+		      has a URL thusly:
+
+		      http://trac.edgewall.org/ticket/886
+
+		      Then TRAC_TICKETS should be:
+
+		      http://trac.edgewall.org/ticket
+
+
+Invocation & Installation
+=========================
+
+You can start djinn from the command line either like this:
+
+	./djinn.py
+
+...or like this:
+
+	python djinn.py
+
+
+At GenieDB we copied djinn.py to /usr/local/bin, set up a specific user for
+djinn to run as and put the following in /etc/rc.local:
+
+	su - djinn -s /bin/bash -c 'nohup /usr/local/bin/djinn.py >/dev/null 2>&1 &'
+
