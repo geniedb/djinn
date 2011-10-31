@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 # This is djinn: A stupid IRC bot written at GenieDB.
-# Copyright (C) 2009 -> 2010 Andy Bennett <andyjpb@geniedb.com>
+# Copyright (C) 2009 -> 2011 Andy Bennett <andyjpb@geniedb.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -129,6 +129,89 @@ class TicketPlugin(PrivmsgPlugin):
 	privmsg_dispatch = {
 			r"#(\d+)": resolve_tickets,
 			r"tickets? ([\d,\s]*)": resolve_tickets,
+			}
+
+	register_evt = {
+			"send_join" : init_room,
+			}
+
+# A plugin that resolves bats specs for the form repo@commit, e.g mysql@andyjpb/master or xos@abc4567
+class BatsSpecPlugin(PrivmsgPlugin):
+	def __init__(self):
+		PrivmsgPlugin.__init__(self)
+		self.name = "Bats Spec Resolver Plugin"
+		self.spec_timeout = 300
+		self.git_root = "/export/git"
+		self.gitlog_bin = "djinn_gitlog"
+
+	def resolve_spec(self, irc_msg, hits):
+		for h in hits:
+			repo = h[0]
+			user = h[1]
+			branch = h[2]
+
+			if irc_msg.type != "user":
+				key = "%s:%s:%s" % (h[0], h[1], h[2])
+				if self.spec_mentions.has_key(irc_msg.reply_to):
+					if self.spec_mentions[irc_msg.reply_to].has_key(key):
+					   if self.spec_mentions[irc_msg.reply_to][key] > time.time()-self.spec_timeout:
+						  continue
+				self.spec_mentions[irc_msg.reply_to][key] = time.time()
+
+			if (user in ["origin", "mainline"]):
+				user = "dev"
+				git_dir = "%s/%s/%s.git" % (self.git_root, repo, user)
+			elif (user in ["release", "bats"]):
+				git_dir = "%s/%s/%s.git" % (self.git_root, repo, user)
+			else:
+				git_dir = "%s/%s/%s.git" % (self.git_root, user, repo)
+
+			args = [self.gitlog_bin, git_dir, branch]
+			try:
+				a = subprocess.Popen(args, stdout=subprocess.PIPE).communicate()[0]
+				for line in a.split("\n"):
+					if (line[0:6] == "fatal:"):
+						irc_msg.irc_server.privmsg(irc_msg.reply_to, "%s@%s/%s: Could not find revision" % (repo, h[1], branch))
+						break
+					else:
+						irc_msg.irc_server.privmsg(irc_msg.reply_to, "%s@%s/%s %s" % (repo, h[1], branch, line))
+			except OSError, e:
+				irc_msg.irc_server.privmsg(irc_msg.reply_to, ("%s: %s" % (self.gitlog_bin, e)))
+
+	def resolve_hex(self, irc_msg, hits):
+		for h in hits:
+			repo = h[0]
+			hash = h[1]
+
+			if irc_msg.type != "user":
+				key = "%s:%s:%s" % (h[0], h[1], h[2])
+				if self.spec_mentions.has_key(irc_msg.reply_to):
+					if self.spec_mentions[irc_msg.reply_to].has_key(key):
+					   if self.spec_mentions[irc_msg.reply_to][key] > time.time()-self.spec_timeout:
+						  continue
+				self.spec_mentions[irc_msg.reply_to][key] = time.time()
+
+			args = [self.gitlog_bin, self.git_root, hash]
+			try:
+				a = subprocess.Popen(args, stdout=subprocess.PIPE).communicate()[0]
+				for line in a.split("\n"):
+					if (line[0:6] == "fatal:"):
+						irc_msg.irc_server.privmsg(irc_msg.reply_to, "%s@%s: Could not find revision" % (repo, hash))
+						break
+					else:
+						irc_msg.irc_server.privmsg(irc_msg.reply_to, "%s@%s %s" % (repo, hash, line))
+			except OSError, e:
+				irc_msg.irc_server.privmsg(irc_msg.reply_to, ("%s: %s" % (self.gitlog_bin, e)))
+
+	def init_room(self, irc_evt):
+		chan = irc_evt.payload
+		self.spec_mentions[chan] = {}
+
+	spec_mentions = {}
+
+	privmsg_dispatch = {
+			r"([a-zA-Z0-9_-]+)@([0-9a-fA-F]+)(\s|$)": resolve_hex,
+			r"([a-zA-Z0-9_-]+)@([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_\-.]+)(\s|$)": resolve_spec,
 			}
 
 	register_evt = {

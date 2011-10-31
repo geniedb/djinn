@@ -66,6 +66,25 @@ The plugins are:
 
 		http://trac.edgewall.org/ticket
 
+	BatsSpecPlugin
+		A plugin that resolves bats specs for the form repo@commit, e.g mysql@andyjpb/master or xos@abc4567
+		This plugin requires the djinn_gitlog helper script.
+		You will want to customise the following variables in the
+		plugin's __init__ procedure:
+
+		self.git_root: The place where you keep your git repositories.
+		               Here at GenieDB we keep them in
+			       /export/git/<repo>/<team>.git and
+			       /export/git/<user>/<repo>.git
+		self.gitlog_bin: Where to find the djinn_gitlog helper script.
+
+		This plugin assumes a lot about the structure of the directory
+		hierarchy found at self.git_root. It's quite GenieDB specific
+		and you probably want to do your own thing.
+
+		You only need to register this plugin once and it will for for
+		all channels djinn joins as well as user to user messages.
+
 	QuenchPlugin
 		A plugin that makes sure we don't say anything for 60 seconds
 		in channels we've been told to "shutup" in.
@@ -173,4 +192,8 @@ If you want to use the "World clock"/wdate functionality then you'll need to
 ensure that djinn can find the wdate shell script on it's path. Here at GenieDB
 we just copy it to /usr/local/bin along with djinn.py. You will also probably
 want to modify the wdate script to include your choice of timezones.
+
+If you want to use the BatsSpecPlugin you will need to ensure that djinn can
+find the djinn_gitlog shell script on it's path. Here at GenieDB we just copy it
+to /usr/local/bin along with djinn.py.
 

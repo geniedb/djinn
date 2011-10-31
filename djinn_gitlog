@@ -1,0 +1,91 @@
+#!/bin/sh
+
+# This is djinn_gitlog: resolve <repo>@<commit_ref> into the first line of a commit 
+# message
+# Copyright (C) 2011 Andy Bennett <andyjpb@geniedb.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+
+# djinn_gitlog <git_root>[/repo] <git_ref>
+
+if [ ! -d "$1" ]; then
+	exit 3
+fi
+
+OK=0
+case $1 in
+	/export/git/*)
+		OK=1
+		;;
+	/export/git)
+		OK=2
+		;;
+esac
+if [ $OK -eq 0 ]; then
+	exit 3
+fi
+
+
+cd $1
+
+case $2 in
+	*..*)
+		exit 3
+		;;
+	*/*)
+		exit 3
+		;;
+esac
+
+# djinn_gitlog <git_root>/repo <git_ref>
+# Resolve the <git_ref> in the specified repo
+if [ $OK -eq 1 ]; then
+	exec git log -1 "$2" --pretty=format:'(%h): %s (%an, %ar)' 2>&1 | cat
+	exit 0
+fi
+
+# djinn_gitlog <git_root> <git_ref>
+# Find all the repos under <git_root> that <git_ref> exists in
+PMSG=""
+if [ $OK -eq 2 ]; then
+	REPOS=`find -maxdepth 2 -mindepth 2 -type d | grep "\.git$"`
+	for r in $REPOS; do
+		pushd $r > /dev/null 2>&1
+		if [ $? -ne 0 ]; then
+			continue
+		fi
+		MSG=`exec git log -1 "$2" --pretty=format:'(%h): %s (%an, %ar)' 2>&1 | cat`
+		#echo "<$MSG>"
+		case $MSG in
+			fatal:*)
+			popd > /dev/null
+			continue
+			;;
+		esac
+		if [ "$PMSG" == "" ]; then
+			PMSG="$MSG"
+			echo -ne "$PMSG\nfound in: "
+		fi
+		if [ "$PMSG" == "$MSG" ]; then
+			echo -n "$r " | sed -e 's#./##' -e 's#\.git$##'
+		else
+			PMSG="$MSG"
+			echo -ne "$PMSG\n\t"
+			echo -n "$r " | sed -e 's#./##'
+		fi
+		popd > /dev/null
+	done
+fi
+
