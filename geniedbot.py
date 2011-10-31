@@ -98,6 +98,7 @@ class TicketPlugin(PrivmsgPlugin):
 		self.name = "Ticket Plugin"
 		self.ticket_timeout = 300
 		self.trac_tickets = "http://aladdin.example.net/trac/ticket"
+		self.shortner = "http://short/g"
 
 	def resolve_tickets(self, irc_msg, hits):
 		for h in hits:
@@ -112,6 +113,7 @@ class TicketPlugin(PrivmsgPlugin):
 					self.ticket_mentions[irc_msg.reply_to][i] = time.time()
 
 				URL="%s/%s" % (self.trac_tickets, i)
+				short_URL="%s%s" % (self.shortner, i)
 				sock = urllib.urlopen("%s" % URL)
 				ticket_html = sock.read()
 				sock.close()
@@ -121,8 +123,8 @@ class TicketPlugin(PrivmsgPlugin):
 				ticket_title = re.search(r".*#[0-9\s]*\((.*).*\).*", ticket_title)
 				if (ticket_title):
 					ticket_title = ticket_title.group(1)
-					irc_msg.irc_server.privmsg(irc_msg.reply_to, "Ticket #%s: %s (%s)" % (i, ticket_title, URL))
-	
+					irc_msg.irc_server.privmsg(irc_msg.reply_to, "Ticket #%s: %s (%s)" % (i, ticket_title, short_URL))
+
 	def init_room(self, irc_evt):
 		chan = irc_evt.payload
 		self.ticket_mentions[chan] = {}
