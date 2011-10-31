@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # This is djinn: A stupid IRC bot written at GenieDB.
-# Copyright (C) 2009 -> 2010 Andy Bennett <andyjpb@geniedb.com>
+# Copyright (C) 2009 -> 2011 Andy Bennett <andyjpb@geniedb.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -442,6 +442,7 @@ class IRCBot:
                 if not result:
                     state = "failed"
                 debug(self.dbgstr, "    %s handled: %s (%s)" % (event, plugin.name, result))
-                return state
+                #return state
         else:
             return "unhandled"
+        return "handled"
