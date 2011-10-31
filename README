@@ -197,3 +197,20 @@ If you want to use the BatsSpecPlugin you will need to ensure that djinn can
 find the djinn_gitlog shell script on it's path. Here at GenieDB we just copy it
 to /usr/local/bin along with djinn.py.
 
+
+Integration With External Progams
+=================================
+
+djinn creates a fifo in /tmp/<ident>.<channel> for each channel that it joins.
+When data appears in the fifo, say it in the appropriate channel. This allows
+external programs to say things as djinn in IRC.
+
+Here at GenieDB we run the djinn process under its own UID and GID and arrange
+for the file system permissions on the fifo to be 660 (-rw-rw----). Process that
+need to be able to speak as djinn are made members of the djinn group. They can
+then speak in a channel thusly:
+
+	if [ -p "/tmp/djinn.#geniedb" ]; then
+		echo "Hello World" > "/tmp/djinn.#geniedb"
+	fi
+

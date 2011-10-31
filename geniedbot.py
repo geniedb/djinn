@@ -65,6 +65,9 @@ import re
 import time
 import urllib       # For TicketPlugin
 import subprocess   # For WorldDatePlugin
+import os           # For ChannelPlugin fifos
+import select       # For ChannelPlugin fifos
+import string       # For ChannelPlugin fifos
 
 BotPlugin = djinn.BotPlugin
 debug = djinn.debug
@@ -348,12 +351,61 @@ class ChannelPlugin(BotPlugin):
 		BotPlugin.__init__(self)
 		self.name = "Channel Plugin"
 		self.channel = channel
+		self.fifo = None
+		self.fifo_file = None
 
 		self.register_msg = self.register_msg.copy()
 		self.register_msg["251"] = ChannelPlugin.join_channel
+		self.register_evt = self.register_evt.copy()
+		self.register_evt["socket"] = ChannelPlugin.read_socket
+	def startup(self, irc_server):
+		BotPlugin.startup(self, irc_server)
+		self.fifo_file = "/tmp/%s.%s" % (irc_server.ident, self.channel)
 	def join_channel(self, irc_msg):
+		if self.fifo:
+			try:
+				irc_msg.irc_server.poll.unregister(self.fifo)
+			except KeyError:
+				pass
+			self.fifo = None
+		try:
+			os.remove(self.fifo_file)
+		except OSError:
+			pass
+		os.mkfifo(self.fifo_file)
+		self.fifo = os.open(self.fifo_file, os.O_RDONLY | os.O_NONBLOCK)
+		if self.fifo:
+			irc_msg.irc_server.poll.register(self.fifo, select.POLLIN)
 		irc_msg.irc_server.irc_join(self.channel)
 		return True
+	def read_socket(self, irc_evt):
+		fd, evt = irc_evt.payload
+		irc_evt.dump()
+		if fd == self.fifo and evt & select.POLLIN:
+			buf = ""
+			try:
+				buf = os.read(self.fifo, 1024)
+				while buf:
+					tmp = os.read(self.fifo, 1024)
+					if tmp:
+						buf += tmp
+					else:
+						break
+			except OSError, (eno, emsg):
+				pass
+			lines = string.split(buf, "\n")
+			for line in lines:
+				line = line.rstrip()
+				if line:
+					irc_evt.irc_server.privmsg(self.channel, line)
+		os.close(self.fifo)
+		irc_evt.irc_server.poll.unregister(self.fifo)
+		self.fifo = os.open(self.fifo_file, os.O_RDONLY | os.O_NONBLOCK)
+		if self.fifo:
+			irc_evt.irc_server.poll.register(self.fifo, select.POLLIN)
+		return True
+
+
 
 class StaffChannelPlugin(ChannelPlugin):
 	def __init__(self, channel):
