@@ -14,9 +14,47 @@ You will probably want to edit djinn.py to set the following variables:
 	HOST: Set this to the hostname of the IRC server you wish djinn to
 	      connect to.
 
-	NICK: Set this to the IRC nick that you wish djinn to use.
+	PREF_NICK: Set this to the IRC nick that you wish djinn to use.
+	           (replaces NICK from v0.)
 
-	CHAN: Set this to the IRC channel that you wish djinn to join.
+	ADMIN_CHAN: Set this to the IRC channel that you wish djinn to join.
+	            This is where things such as joins to the support channels
+		    will be reported.
+		    (replaces CHAN from v0.)
+
+	WAITING_CHANS: Channels to join and use as "waiting rooms". djinn will
+	               join these channels and attempt to become and operator,
+		       set the topic, set the "moderated" bit and set
+		       "auditorium" bit that means regular users can only see
+		       operators in the IRC NAMES list.
+		       When other users join djinn will announce them in the
+		       ADMIN_CHANNEL.
+		       WAITING_CHANS are intended to be used as customer support
+		       channels. Usually a single customer support channel is
+		       advertised and as customers join, support staff can send
+		       IRC INVITEs to invite them into specific support
+		       channels. The channel is set up so that different
+		       customers cannot interact with each other whilst they are
+		       waiting.
+		       The full functionality of waiting rooms may require
+		       InspIRCd with appropriate modules enabled.
+		       djinn aquires the appropriate priviledges that are needed
+		       to set the channel mode bits by interacting with WarBot
+		       who looks after the IRC server that GenieDB uses. If you
+		       are using WarBot, fill in the WARBOT_NICK and
+		       WARBOT_PASSWD variables. WarBot can be obtained here:
+		       https://github.com/alaricsp/warbot
+		       If you send a private message saying "opme" to djinn then
+		       it will attempt to give ops to the nick "andyjpb" in the
+		       channel #geniedb-support. This is hardcoded: to change it
+		       edit the opme procedure.
+
+	WARBOT_NICK: The name to send to the WarBot "auth" command. WarBot can
+	             be obtained from https://github.com/alaricsp/warbot
+
+	WARBOT_PASSWD: The password  to send to the WarBot "auth" command.
+	               WarBot can be obtained from
+		       https://github.com/alaricsp/warbot
 
 	TRAC_TICKETS: Set this to the URL of the ticket section of your trac
 	              installation. You can find this out by viewing one of your
@@ -29,6 +67,11 @@ You will probably want to edit djinn.py to set the following variables:
 		      Then TRAC_TICKETS should be:
 
 		      http://trac.edgewall.org/ticket
+
+	TICKET_TIMEOUT: Once a ticket has been resolved, don't re-resolve it for
+	                TICKET_TIMEOUT number of seconds.
+
+	DBG: Switch on debugging messages on stdout.
 
 
 Invocation & Installation
@@ -47,4 +90,10 @@ At GenieDB we copied djinn.py to /usr/local/bin, set up a specific user for
 djinn to run as and put the following in /etc/rc.local:
 
 	su - djinn -s /bin/bash -c 'nohup /usr/local/bin/djinn.py >/dev/null 2>&1 &'
+
+
+If you want to use the "World clock"/wdate functionality then you'll need to
+ensure that djinn can find the wdate shell script on it's path. Here at GenieDB
+we just copy it to /usr/local/bin along with djinn.py. You willl also probably
+want to modify the wdate script to include your choice of timezones.
 

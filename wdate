@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# This is wdate: A simple clock that prints the current time in various
+# timezones.
+# Copyright (C) 2010 Andy Bennett <andyjpb@ashurst.eu.org>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# version 2 as published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+if [ 0 != $# ]; then
+	for t in $@; do
+		S_ZONES="$S_ZONES -e $t"
+	done
+	ZONES=`find /usr/share/zoneinfo/ -type f | grep -v -e right -e zone.tab| sed -e 's#/usr/share/zoneinfo/##' -e 's#posix/##' |sort -u | grep -ix $S_ZONES`
+else
+	ZONES="America/Los_Angeles America/New_York UTC Europe/London Europe/Rome Australia/Adelaide"
+fi
+
+for t in $ZONES; do
+	d=`TZ=$t date`
+	echo "$d ($t)"
+done
+
