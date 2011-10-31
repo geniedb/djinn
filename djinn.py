@@ -20,21 +20,13 @@
 # #############################################################################
 # djinn : GenieDB IRC Bot
 #
-#  This is djinn, a stupid IRC bot.
+#  This is djinn, a stupid IRC bot framework.
 #
 #  djinn can:
-#   ...be extended to respond to arbitrary regexes that it matches.
-#   ...join multiple channels on a single IRC server
-#   ...announce when people join and leave channels that it has joined
+#   ...be extended to respond to arbitrary irc commands that it matches.
 #   ...be extended to handle different IRC commands
 #
-#  Specifically,
-#   ...query trac to resolve the titles and links for GenieDB ticket numbers
-#   ...announce the date and time for different cities around the world
-#   ...keep quite for 60 seconds when told to or when it detects a GDB
-#    backtrace which can contain things that look like GenieDB ticket numbers
-#
-# Andy Bennett <andyjpb@geniedb.com>
+# Andy Bennett <andyjpb@geniedb.com>, 2010/08/19
 #
 # #############################################################################
 
@@ -74,17 +66,17 @@ class buffer:
 
 
 def debug(dbgstr, msg):
-    print ("%s: %s" % (dbgstr, msg))
+    print ("[%s] %s: %s" % (time.strftime("%a:%H:%M:%S"), dbgstr, msg))
 
 
 class IRCMsg:
     def __init__(self, ircserver, irc_cmd, src, dst, opts, body):
-        self.ircserver = ircserver  # Originating IRCServer Object
+        self.irc_server = ircserver  # Originating IRCServer Object
         self.irc_cmd = irc_cmd      # IRC command (251, 004, PRIVMSG, etc)
         self.src = src              # Sender of the message (user nick & ident, channel, servername)
         self.src_ident = None       # Only for "personal" (user) messages
         self.src_nick = None        # Only for "personal" (user) messages
-        self.src_type = None        # server, channel or user
+        self.type = None            # server, channel or user
         self.dst = dst              # Recipient of the message (our nick, channel)
         self.opts = opts
         self.body = body            # String or array of body parts
@@ -92,30 +84,165 @@ class IRCMsg:
 
         self.dbgstr = ircserver.dbgstr + ":IRCMsg"
 
-        pling = src.find("!")
-        if (src[0] == "#"):
-            self.src_type = "channel"
-            self.reply_to = src
-        elif (pling >= 0):
-            self.src_nick = src[0:pling]
-            self.src_ident = src[(pling+1):]
-            self.reply_to = self.src_nick
-            self.src_type = "user"
+        if src != None:
+            pling = src.find("!")
+            if (pling >= 0):
+                self.src_nick = src[0:pling]
+                self.src_ident = src[(pling+1):]
+            if (dst != None) and (dst[0] == "#"):
+                self.reply_to = dst
+                self.type = "channel"
+            elif (pling >= 0):
+                self.reply_to = self.src_nick
+                self.type = "user"
+            else:
+                self.type = "server"
+                self.reply_to = None
+            #debug(self.dbgstr, "     src: <%s>, type: <%s>, reply_to: <%s>, src_ident: <%s>, src_nick: <%s>" % (self.src, self.type, self.reply_to, self.src_ident, self.src_nick))
         else:
-            self.src_type = "server"
+            self.type = "server"
             self.reply_to = None
-        #debug(self.dbgstr, "     src: <%s>, type: <%s>, reply_to: <%s>, src_ident: <%s>, src_nick: <%s>" % (self.src, self.src_type, self.reply_to, self.src_ident, self.src_nick))
+
+    def dump(self):
+        print("ircserver : <%s>" % self.irc_server)
+        print("  irc_cmd : <%s>" % self.irc_cmd)
+        print("      src : <%s>" % self.src)
+        print("src_ident : <%s>" % self.src_ident)
+        print(" src_nick : <%s>" % self.src_nick)
+        print(" type     : <%s>" % self.type)
+        print("      dst : <%s>" % self.dst)
+        print("     opts : <%s>" % self.opts)
+        print("     body : <%s>" % self.body)
+        print(" reply_to : <%s>" % self.reply_to)
+        print("   dbgstr : <%s>" % self.dbgstr)
+
+class IRCEvt:
+    def __init__(self, ircserver, irc_evt, payload):
+        self.irc_server = ircserver
+        self.irc_evt = irc_evt
+        self.payload = payload
+        self.dbgstr = ircserver.dbgstr + ":IRCEvt"
+
+    def dump(self):
+        print("ircserver : <%s>" % self.irc_server)
+        print("  irc_cmd : <%s>" % self.irc_evt)
+        print("  payload : <%s>" % self.payload)
+        print("   dbgstr : <%s>" % self.dbgstr)
 
 
 class BotPlugin:
     def __init__(self):
         self.name = None
-
+    def startup(self, irc_server):
+        self.dbgstr = ("%s:%s" % (irc_server.dbgstr, self.name))
+        debug(self.dbgstr, "Starting")
     register_msg = {}
     register_evt = {}
 
 
-class IRCServer:
+# Provides basic handlers that deal with ping/pong, nicks, etc
+# Does this by pulling in other plugins
+class BasicPlugin(BotPlugin):
+    def __init__(self):
+        BotPlugin.__init__(self)
+        self.name = "Basic Plugin"
+    def startup(self, irc_server):
+        BotPlugin.startup(self, irc_server)
+        irc_server.register_plugin(ErrorPlugin())
+        irc_server.register_plugin(NickChooserPlugin())
+        irc_server.register_plugin(PingPongPlugin())
+
+class ErrorPlugin(BotPlugin):
+    def __init__(self):
+        BotPlugin.__init__(self)
+        self.name = "Error Plugin"
+    def handle_error(self, irc_msg):
+        if irc_msg.body[0] == "ip (Excess Flood)":
+            irc_msg.irc_server.delay += irc_msg.irc_server.delay_incr
+            return False    # Cause the connection to be dropped
+        if irc_msg.body[0] == "reconnect too fast.":
+            time.delay(10)
+            return False    # Cause the connection to be dropped
+        return True
+    register_msg = {
+            "ERROR" : handle_error,
+            }
+
+class NickChooserPlugin(BotPlugin):
+    def __init__(self):
+        BotPlugin.__init__(self)
+        self.name = "Nick Chooser Plugin"
+    def got_nick(self, irc_msg):
+        irc_msg.irc_server.nick = irc_msg.dst
+        return True
+    def nick_in_use(self, irc_msg):
+        if irc_msg.body[0] == "Nickname is already in use.":
+            new_nick = ("%s_" % irc_msg.irc_server.nick)
+            irc_msg.irc_server.nick = new_nick
+            irc_msg.irc_server.irc_nick(new_nick)
+        return True
+    def check_nick(self, irc_msg):
+        if irc_msg.irc_server.nick != irc_msg.irc_server.prefnick:
+            irc_msg.irc_server.nick = irc_msg.irc_server.prefnick
+            irc_msg.irc_server.irc_nick(irc_msg.irc_server.prefnick)
+        return True
+    register_msg = {
+            "251"    : got_nick,
+            "433"    : nick_in_use,
+            "PING"   : check_nick,
+            "PONG"   : check_nick,
+            }
+
+class PingPongPlugin(BotPlugin):
+    def __init__(self):
+        BotPlugin.__init__(self)
+        self.name = "Ping/Pong Plugin"
+        self.pong = None    # The ID of the outstanding PONG we're expecting from the server
+        self.last_ping = 0
+        self.ping_period = 90
+    def send_pong(self, irc_msg):
+        this_ping = time.time()
+        self.ping_period = this_ping - self.last_ping + 3    # If the server is pinging us then we probably don't need to ping it to keep the connection alive
+        self.last_ping = this_ping
+        irc_msg.irc_server.send("PONG %s" % irc_msg.body[0])
+        irc_msg.irc_server.socket.settimeout(self.ping_period)
+        return True
+    def recv_pong(self, irc_msg):
+        ts = irc_msg.body[0]
+        if ts == self.pong:
+            self.pong = None
+            self.ping_period = self.ping_period * 1.1    # The server is alive: open out our ping period
+            irc_msg.irc_server.socket.settimeout(self.ping_period)
+        else:
+            debug(self.dbgstr, "Ignoring spurious PONG :%s != %s" % (ts, self.pong))
+        return True
+    def send_ping(self, irc_evt):
+        if self.pong == None:
+            self.pong = str(int(time.time()))
+            irc_evt.irc_server.send("PING %s" % self.pong)
+            irc_evt.irc_server.socket.settimeout(3)
+            return True
+        else:
+            self.ping_period = int(self.ping_period / 2)
+            debug(self.dbgstr, "Won't PING: token already outstanding: %s" % self.pong)
+            return False
+    register_msg = {
+            "PING"   : send_pong,
+            "PONG"   : recv_pong,
+            }
+    register_evt = {
+            "socket_timeout" : send_ping,
+            }
+
+
+# Provides handlers that list plugins, etc
+class DbgPlugin(BotPlugin):
+    def __init__(self):
+        BotPlugin.__init__(self)
+        self.name = "Debugging Plugin"
+
+
+class IRCBot:
     def __init__(self, server, ident, nick, realname, port = 6667):
         self.server = server
         self.ident = ident
@@ -126,11 +253,11 @@ class IRCServer:
         self.connected = 0
         self.dbgstr = ("%s:%s" % (server, ident))
         self.ping_period = 90     # Expect to see a ping from a server every 90 seconds by default
-        self.pong = None    # The ID of the outstanding PONG we're expecting from the server
         self.socket = None
         self.delay = 0.1
         self.delay_incr = 0.1
         self.rxbuf = None
+        self.plugins = []
         self.msg_dispatch = {}
         self.evt_dispatch = {}
 
@@ -156,6 +283,7 @@ class IRCServer:
             self.socket.settimeout(self.ping_period)
             self.rxbuf = buffer(self.socket)
             debug(self.dbgstr, "Connected!")
+            self.fire_evt("connected")
         else:
             debug(self.dbgstr, "Already Connected!")
 
@@ -169,7 +297,9 @@ class IRCServer:
             try:
                 for line in self.rxbuf.next():
                     debug(self.dbgstr, "RX: %s" % line)
-                    self.irc_parse(line)
+                    if not self.irc_parse(line):
+                        self.dropconnect()
+                        return
             except socket.timeout, emsg:
                 debug(self.dbgstr, "listen(): %s" % emsg)
                 event = "socket_timeout"
@@ -177,21 +307,17 @@ class IRCServer:
                 debug(self.dbgstr, "listen(): %s" % emsg)
                 event = "socket_error"
             if (event != None):
-                if (self.evt_dispatch.has_key(event)):
-                    for plugin, handler in self.evt_dispatch(event):    # Turn into map?
-                        debug(self.dbgstr, "    Handled: %s" % plugin.name)
-                        if not handler(plugin, event):
-                            self.dropconnect()
-                            return
-                else:
+                event = self.fire_evt(event)
+                if event == "unhandled":
+                    debug(self.dbgstr, "    Unhandled socket event: aborting!")
+                    self.dropconnect()
+                    return
+                elif event == "failed":
                     self.dropconnect()
                     return
 
-    def irc_register(self):
-            self.send("USER %s %s bla :%s" % (self.ident, self.server, self.realname))
-            self.irc_nick()
-
     def register_plugin(self, plugin):
+        self.plugins.append(plugin)
         debug(self.dbgstr, "Registering plugin: %s!" % plugin.name)
         for evt, fn in plugin.register_evt.iteritems():
             debug(self.dbgstr, "    evt: <%s>" % evt)
@@ -203,12 +329,42 @@ class IRCServer:
             if not self.msg_dispatch.has_key(msg):
                 self.msg_dispatch[msg] = []
             self.msg_dispatch[msg].append([plugin, fn])
+        plugin.startup(self)
 
     # ###############
     # IRC Commands
     # ###############
-    def irc_nick(self):
-        self.send("NICK %s" % self.prefnick)
+    def irc_register(self):
+        self.send("USER %s %s bla :%s" % (self.ident, self.server, self.realname))
+        self.irc_nick(self.prefnick)
+
+    def irc_nick(self, nick):
+        self.send("NICK %s" % self.nick)
+
+    def privmsg(self, chan, msg):
+        event = self.fire_evt("send_privmsg", [chan, msg])
+        if event != "failed":    # Noone prevented us from sending the message
+            self.send("PRIVMSG %s :%s" % (chan, msg))
+
+    def irc_setmode(self, entity, mode):
+        event = self.fire_evt("send_mode", [entity, mode])
+        self.send("MODE %s %s" % (entity, mode))
+
+    def irc_join(self, chan):
+        event = self.fire_evt("send_join", chan)
+        self.send("JOIN :%s" % chan)
+
+    def irc_settopic(self, chan, topic):
+        event = self.fire_evt("send_topic", [chan, topic])
+        self.send("TOPIC %s :%s" % (chan, topic))
+
+    def irc_invite(self, nick, chan):
+        event = self.fire_evt("send_invite", [nick, chan])
+        self.send("INVITE %s :%s" % (nick, chan))
+
+    def irc_kick(self, nick, chan, reason=None):
+        event = self.fire_evt("send_kick", [nick, chan, reason])
+        self.send("KICK %s %s :%s" % (chan, nick, reason))
 
     # ###############
     # Private
@@ -227,6 +383,7 @@ class IRCServer:
         self.socket = None
         self.rxbuf = None
         self.connected = 0
+        time.sleep(10)
 
     def irc_parse(self, line):
         line = string.rstrip(line)
@@ -245,16 +402,19 @@ class IRCServer:
                 else:
                     print ("    Can't parse: <%s>" % line)
                     raise error
-                irc_cmd = meta[1]
+                irc_cmd = meta[1].strip()
                 src = meta[0]
-                dst = meta[2]
+                if len(meta) > 2:
+                    dst = meta[2]
+                else:
+                    dst = None
                 irc_msg = IRCMsg(self, irc_cmd, src, dst, vars, body)
                 #debug(self.dbgstr, "    meta: <%s>, vars: <%s>, body: <%s>" % (meta, vars, body))
-            elif (len(line) == 2):     # "PING :irc.local"
-                irc_cmd = line[0]
-                body = line[1]
+            elif (len(line) >= 2):     # "PING :irc.local" or "ERROR :Closing link (djinn2@127.0.0.1) [Ping timeout: 121 seconds]"
+                irc_cmd = line[0].strip()
+                body = line[1:]
                 irc_msg = IRCMsg(self, irc_cmd, None, None, None, body)
-                debug(self.dbgstr, "    cmd: <%s>, body: <%s>" % (cmd, body))
+                debug(self.dbgstr, "    cmd: <%s>, body: <%s>" % (irc_cmd, body))
             else:
                 print ("    Can't parse: <%s>" % line)
                 raise error
@@ -264,32 +424,24 @@ class IRCServer:
         if (irc_msg != None) and (self.msg_dispatch.has_key(irc_msg.irc_cmd)):
             for plugin, handler in self.msg_dispatch[irc_msg.irc_cmd]:
                 debug(self.dbgstr, "    Handled: %s" % plugin.name)
-                handler(plugin, irc_msg)
+                if not handler(plugin, irc_msg):
+                    print "being false"
+                    return False
+        return True
+
+    # returns
+    #  "unhandled" if noone handled the event
+    #  "failed" if a handler returned False
+    #  or "success" if all the handlers returned True
+    def fire_evt(self, event, payload=None):
+        if (self.evt_dispatch.has_key(event)):
+            state = "success"
+            for plugin, handler in self.evt_dispatch[event]:    # Turn into map?
+                # If any of the events return False then we must report failure
+                result = handler(plugin, IRCEvt(self, event, payload))
+                if not result:
+                    state = "failed"
+                debug(self.dbgstr, "    %s handled: %s (%s)" % (event, plugin.name, result))
+                return state
         else:
-            debug(self.dbgstr, "    Unhandled command: %s" % irc_cmd)
-
-
-
-#warhead = IRCServer("localhost", "djinn2", "djinnv2", "GenieBot")
-#while 1:
-#    warhead.connect()
-#    warhead.irc_register()
-#    warhead.listen()
-
-#Pong code
- #                if self.pong == None:
- #                   self.irc_ping()
- #               else:
- #                   debug(self.dbgstr, "Server has gone away!")
- #                   self.ping_period = int(self.ping_period / 2)
- #                   self.dropconnect()
- #                   return
-
-
-#def irc_ping(self, token = int(time.time())):
-#        if self.pong != 0:
-#            debug(self.dbgstr, "irc_ping(): Already have a ping outstanding! (%s)" % self.pong)
-#        self.pong = str(token)
-#        self.send("PING %s" % token)
-
-
+            return "unhandled"

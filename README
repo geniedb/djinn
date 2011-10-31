@@ -2,76 +2,153 @@ djinn is a stupid IRC bot written at GenieDB.
 
 https://github.com/geniedb/djinn
 
-An IRC bot that brings trac to IRC,
+An IRC bot that brings trac to IRC, runs a support channel, and a few other
+useful things.
 djinn was written by Andy Bennett <andyjpb@geniedb.com>
 
 
 Setup & Configuration
 =====================
 
-You will probably want to edit djinn.py to set the following variables:
+You will probably want to copy geniedbot.py to a new file and then set then
+edit things in the following way:
 
-	HOST: Set this to the hostname of the IRC server you wish djinn to
-	      connect to.
+	The geniedbot.py file contains your site specific plugins at the top and
+	your specific instantiations of those plugins that comprise your bot at
+	the bottom.
 
-	PREF_NICK: Set this to the IRC nick that you wish djinn to use.
-	           (replaces NICK from v0.)
+	First scroll to the bottom of the file and edit the following line:
 
-	ADMIN_CHAN: Set this to the IRC channel that you wish djinn to join.
-	            This is where things such as joins to the support channels
-		    will be reported.
-		    (replaces CHAN from v0.)
+	warhead = djinn.IRCBot("localhost", "djinn", "djinn", "GenieBot")
 
-	WAITING_CHANS: Channels to join and use as "waiting rooms". djinn will
-	               join these channels and attempt to become and operator,
-		       set the topic, set the "moderated" bit and set
-		       "auditorium" bit that means regular users can only see
-		       operators in the IRC NAMES list.
-		       When other users join djinn will announce them in the
-		       ADMIN_CHANNEL.
-		       WAITING_CHANS are intended to be used as customer support
-		       channels. Usually a single customer support channel is
-		       advertised and as customers join, support staff can send
-		       IRC INVITEs to invite them into specific support
-		       channels. The channel is set up so that different
-		       customers cannot interact with each other whilst they are
-		       waiting.
-		       The full functionality of waiting rooms may require
-		       InspIRCd with appropriate modules enabled.
-		       djinn aquires the appropriate priviledges that are needed
-		       to set the channel mode bits by interacting with WarBot
-		       who looks after the IRC server that GenieDB uses. If you
-		       are using WarBot, fill in the WARBOT_NICK and
-		       WARBOT_PASSWD variables. WarBot can be obtained here:
-		       https://github.com/alaricsp/warbot
-		       If you send a private message saying "opme" to djinn then
-		       it will attempt to give ops to the nick "andyjpb" in the
-		       channel #geniedb-support. This is hardcoded: to change it
-		       edit the opme procedure.
+	The parameters to the IRCBot constructor are:
+		server, ident, nick, realname and, optionally, port.
 
-	WARBOT_NICK: The name to send to the WarBot "auth" command. WarBot can
-	             be obtained from https://github.com/alaricsp/warbot
+	If djinn cannot obtain the nick that you specify underscores will be
+	appended until the nick is successfully obtained. djinn will then
+	periodically attempt to change its nick to the originally specified
+	nick.
 
-	WARBOT_PASSWD: The password  to send to the WarBot "auth" command.
-	               WarBot can be obtained from
-		       https://github.com/alaricsp/warbot
+	Once you have your Bot, register the plugins that you require thusly:
 
-	TRAC_TICKETS: Set this to the URL of the ticket section of your trac
-	              installation. You can find this out by viewing one of your
-		      trac tickets in your browser and then removing the last
-		      portion, including the slash. For example, if your ticket
-		      has a URL thusly:
+	warhead.register_plugin(djinn.BasicPlugin())
 
-		      http://trac.edgewall.org/ticket/886
+	After the plugin registration comes the main loop which tries to keep
+	the bot connected and registered with the server.
 
-		      Then TRAC_TICKETS should be:
+The plugins are:
 
-		      http://trac.edgewall.org/ticket
+	PrivmsgPlugin
+		This pluging bestows the ability to recieve IRC PRIVMSGes. That
+		is, messages from IRC channels or other IRC users. You probably
+		don't want to instantiate this plugin directly, but if you want
+		to write a plugin that accepts commands from a user then you
+		probably want to subclass this.
 
-	TICKET_TIMEOUT: Once a ticket has been resolved, don't re-resolve it for
-	                TICKET_TIMEOUT number of seconds.
+	TicketPlugin
+		This plugin resolves trac ticket number when djinn hears the
+		ticket number being mentioned. When a ticket number is mentioned
+		djinn looks the title up in trac and replies with it and a
+		hyperlink to the ticket. This plugin only needs to be registered
+		once and it will resolve ticket numbers in all channels that
+		djinn joins and via private message.
 
-	DBG: Switch on debugging messages on stdout.
+		Set the trac tickets URL in the __init__ procedure of the
+		TicketPlugin class. Set self.trac_tickets to the URL of the
+		ticket section of your trac installation. You can find this out
+		by viewing one of your trac tickets in your browser and then
+		removing the last portion, including the slash. For example, if
+		your ticket has a URL thusly:
+
+		http://trac.edgewall.org/ticket/886
+
+		Then self.trac_tickets should be:
+
+		http://trac.edgewall.org/ticket
+
+	QuenchPlugin
+		A plugin that makes sure we don't say anything for 60 seconds
+		in channels we've been told to "shutup" in.
+		If you want quench functionality you only need to register this
+		plugin once and it will work for all channels djinn joins.
+
+	WarbotPlugin
+		This plugin registers with a WarBot and then requests ops in
+		all relevant channels. Special privileges are often required by
+		the WaitingRoomPlugin plugin.
+
+		You will want to customise the following variables in the
+		plugin's __init__ procedure;
+
+		self.warbot_nick: The name to send to the WarBot "auth" command.
+		self.warbot_passwd: The password  to send to the WarBot "auth"
+		                    command.
+
+		WarBot can be obtained from https://github.com/alaricsp/warbot
+
+	WorldDatePlugin
+		This plugin calls an external script, wdate, and sends the
+		output to the channel or user from whence the request
+		originated.
+
+		self.wdate_bin should be set to the script that you want to
+		execute.
+
+	TmpOpPlugin
+		This plugin bestows channel operator mode bits to andyjpb in the
+		channel #geniedb-support. The parameters are hardcoded but feel
+		free to change things as you see fit. This is a quick-and-dirty
+		plugin to aid with testing and debugging. You probably don't
+		want to enable it in your bot.
+
+	TmpDbgPlugin
+		This plugin sends a copy of all personal messages that djinn
+		recieves to the andyjpb nick. The parameters are hardcoded but
+		feel free to change things as you see fit. This is a quick-and-
+		dirty plugin to aid with testing and debugging. You probably
+		don't want to enable it in your bot.
+
+	ChannelPlugin
+		This plugin causes djinn to join the channel specified.
+		Instantiate this plugin thusly:
+
+		warhead.register_plugin(StaffChannelPlugin("#geniedb"))
+
+		Joining a channel with this plugin will allow djinn to provide
+		services such as TicketPlugin and WorldDatePlugin in that
+		channel.
+
+	StaffChannelPlugin
+		This is just a subclass fo the ChannelPlugin and does not
+		currently add any extra functionality.
+
+	WaitingRoomPlugin
+		This is plugin is for using channels as "waiting rooms".
+		Instantiate this plugin thusly:
+
+		warhead.register_plugin(WaitingRoomPlugin("#geniedb-support", "#geniedb"))
+
+		djinn will join the channel specified in the first argument and
+		attempt to become an operator, set the topic, set the
+		"moderated" bit and set the "auditorium" bit that means regular
+		users can only see operators in the IRC NAMES list.
+		When other users join djinn will announce them in the channel
+		specified in the second argument.
+		WaitingRoomPlugin channels are intended to be used as customer
+		support channels. Usually a single customer support channel is
+		advertised and as customers join, support staff can send IRC
+		INVITEs to invite them into specific support channels. The
+		channel is set up so that different customers cannot interact
+		with each other whilst they are waiting.
+
+		The full functionality of waiting rooms may require InspIRCd
+		with appropriate modules enabled. djinn aquires the appropriate
+		priviledges that are needed to set the channel mode bits by
+		interacting with WarBot who looks after the IRC server that
+		GenieDB uses. If you are using WarBot, you will need to
+		configure and instantiate the WarbotPlugin. WarBot can be
+		obtained here: https://github.com/alaricsp/warbot
+
 
 
 Invocation & Installation
@@ -79,21 +156,21 @@ Invocation & Installation
 
 You can start djinn from the command line either like this:
 
-	./djinn.py
+	./geniedbot.py
 
 ...or like this:
 
-	python djinn.py
+	python geniedbot.py
 
 
-At GenieDB we copied djinn.py to /usr/local/bin, set up a specific user for
-djinn to run as and put the following in /etc/rc.local:
+At GenieDB we copied djinn.py and geniedbot to /usr/local/bin, set up a
+specific user for djinn to run as and put the following in /etc/rc.local:
 
-	su - djinn -s /bin/bash -c 'nohup /usr/local/bin/djinn.py >/dev/null 2>&1 &'
+	su - djinn -s /bin/bash -c 'nohup /usr/local/bin/geniedbot.py >/dev/null 2>&1 &'
 
 
 If you want to use the "World clock"/wdate functionality then you'll need to
 ensure that djinn can find the wdate shell script on it's path. Here at GenieDB
-we just copy it to /usr/local/bin along with djinn.py. You willl also probably
+we just copy it to /usr/local/bin along with djinn.py. You will also probably
 want to modify the wdate script to include your choice of timezones.
 
