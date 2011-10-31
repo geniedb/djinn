@@ -7,6 +7,8 @@ useful things.
 djinn was written by Andy Bennett <andyjpb@geniedb.com>
 
 
+djinn now requires Python2.6
+
 Setup & Configuration
 =====================
 
@@ -121,6 +123,18 @@ The plugins are:
 		self.wdate_bin should be set to the script that you want to
 		execute.
 
+	WhereUserPlugin
+		This plugin requires Westly Ward's ipinfodb.py library which is
+		supplied as ipinfodb.py.
+		This plugin tries to determine the geographical location of a
+		user based on their whois information and Westly Ward's ipinfodb
+		library.
+		In order to use this plugin you will need to supply your own
+		IPInfoDb.com API key.
+		Insert your API key into the appropriate place on the following
+		line in the plugin's __init__ procedure:
+			self.IPInfo = ipinfodb.IPInfo("APIKEY") #API key
+
 	TmpOpPlugin
 		This plugin bestows channel operator mode bits to andyjpb in the
 		channel #geniedb-support. The parameters are hardcoded but feel
@@ -204,6 +218,10 @@ want to modify the wdate script to include your choice of timezones.
 If you want to use the BatsSpecPlugin you will need to ensure that djinn can
 find the djinn_gitlog shell script on it's path. Here at GenieDB we just copy it
 to /usr/local/bin along with djinn.py.
+
+If you want to use the WhereUserPlugin then you'll need to ensure djinn can find
+Westly Ward's ipinfodb.py library. Here at GenieDB we just copy it to
+/usr/local/bin along with djinn.py
 
 
 Integration With External Progams

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.6
 
 # This is djinn: A stupid IRC bot written at GenieDB.
 # Copyright (C) 2009 -> 2011 Andy Bennett <andyjpb@geniedb.com>
@@ -68,6 +68,7 @@ import subprocess   # For WorldDatePlugin
 import os           # For ChannelPlugin fifos
 import select       # For ChannelPlugin fifos
 import string       # For ChannelPlugin fifos
+import ipinfodb     # For WhereUserPlugin
 
 BotPlugin = djinn.BotPlugin
 debug = djinn.debug
@@ -319,6 +320,37 @@ class WorldDatePlugin(PrivmsgPlugin):
 			r"wdate( [A-Za-z/]*)?": world_date,
 			}
 
+class WhereUserPlugin(PrivmsgPlugin):
+        def __init__(self):
+                PrivmsgPlugin.__init__(self)
+                self.name = "User Location Plugin"
+                self.IPInfo = ipinfodb.IPInfo("APIKEY") #API key
+                self.requests = set() 
+
+                self.register_msg = self.register_msg.copy()
+                self.register_msg["311"] = WhereUserPlugin.get_location_from_hostname
+
+        def where_user(self, irc_msg, hits):
+                for prep, user in hits:
+                        self.requests.add((user, irc_msg.reply_to))
+                        irc_msg.irc_server.send("WHOIS %s" % user)
+                
+        def get_location_from_hostname(self, irc_msg):
+                for user, reply_to in [(u, r) for (u, r) in self.requests if u == irc_msg.opts[0].lower()]:
+                        hostname = irc_msg.opts[2]
+                        details = self.IPInfo.GetCity(hostname, True)
+
+                        if details["City"] is not None and details["City"].strip() != "":
+                                details["City"] = u"%s, " % details["City"]
+
+                        irc_msg.irc_server.privmsg(reply_to, ("%s is in %s%s." % (irc_msg.opts[0], details["City"], details["CountryName"])))
+
+                        self.requests.remove((u,r))
+                return True
+                                           
+        privmsg_dispatch = {
+                        r"where (is )?([A-Za-z0-9-_]*)": where_user,
+                        }
 class TmpOpPlugin(PrivmsgPlugin):
 	def __init__(self):
 		PrivmsgPlugin.__init__(self)
